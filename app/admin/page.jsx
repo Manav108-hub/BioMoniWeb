@@ -1,25 +1,33 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { observationService, speciesService, userService } from '../api/service';
+import { observationService, speciesService, userService, questionService } from '../api/service';
 import Navbar from '../components/common/Navbar';
-import { useRouter } from 'next/navigation'; // For redirection
+import { useRouter } from 'next/navigation';
 
 const Admin = () => {
   const [logs, setLogs] = useState([]);
   const [speciesMap, setSpeciesMap] = useState({});
   const [usersMap, setUsersMap] = useState({});
+  const [questions, setQuestions] = useState([]);
+
+  // For adding a new question
+  const [questionText, setQuestionText] = useState('');
+  const [isRequired, setIsRequired] = useState(false);
+  const [optionInput, setOptionInput] = useState('');
+  const [options, setOptions] = useState([]);
+  const [questionSubmitting, setQuestionSubmitting] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter();
 
   useEffect(() => {
-    const checkAdminAccessAndFetchData = async () => {
-      // First, check if a token exists and if the user is an admin
+    const fetchData = async () => {
       const token = localStorage.getItem('token');
       if (!token) {
-        alert('You need to be logged in to access the admin dashboard.');
-        router.push('/login'); // Redirect to login if no token
+        alert('Please log in as an admin.');
+        router.push('/login');
         return;
       }
 
@@ -27,91 +35,79 @@ const Admin = () => {
         setLoading(true);
         setError(null);
 
-        // Fetch user profile to verify admin status on client side
-        // You might have a dedicated /profile endpoint or check a decoded token
-        // For simplicity, let's assume get_current_user in backend validates token and isAdmin.
-        // If current_user check fails in backend, admin_required will raise 401/403.
-
-        // The service methods already extract the relevant array from response.data
-        const [fetchedLogs, fetchedSpeciesList, fetchedUsersList] = await Promise.all([
-          observationService.getAllLogs(), // This now returns directly `species_logs` array
-          speciesService.getSpecies(),     // This now returns directly `species` array
-          userService.getAllUsers()        // This now returns directly `users` array
+        const [fetchedLogs, fetchedSpecies, fetchedUsers, fetchedQuestions] = await Promise.all([
+          observationService.getAllLogs(),
+          speciesService.getSpecies(),
+          userService.getAllUsers(),
+          questionService.getQuestions()
         ]);
 
-        console.log("✅ Fetched Logs (Array):", fetchedLogs);
-        console.log("✅ Fetched Species (Array):", fetchedSpeciesList);
-        console.log("✅ Fetched Users (Array):", fetchedUsersList);
+        setLogs(fetchedLogs || []);
+        setQuestions(fetchedQuestions || []);
 
-        setLogs(fetchedLogs || []); // Ensure it's an array
+        const spMap = {};
+        (fetchedSpecies || []).forEach(s => { spMap[s.id] = s.name; });
+        setSpeciesMap(spMap);
 
-        const newSpeciesMap = {};
-        (fetchedSpeciesList || []).forEach(s => { // Ensure it's iterable
-          newSpeciesMap[s.id] = s.name;
-        });
-        setSpeciesMap(newSpeciesMap);
-
-        const newUserMap = {};
-        (fetchedUsersList || []).forEach(u => { // Ensure it's iterable
-          newUserMap[u.id] = u.username;
-        });
-        setUsersMap(newUserMap);
+        const usrMap = {};
+        (fetchedUsers || []).forEach(u => { usrMap[u.id] = u.username; });
+        setUsersMap(usrMap);
 
       } catch (err) {
-        console.error("❌ Failed to fetch admin data:", err);
-        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-          alert('Access Denied: You do not have administrator privileges or your session has expired.');
-          router.push('/login'); // Redirect if unauthorized/forbidden
+        console.error("Fetch failed", err);
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          alert('Access denied.');
+          router.push('/login');
         } else {
-          setError("Something went wrong while fetching data. Please try again.");
+          setError('Failed to load admin data.');
         }
       } finally {
         setLoading(false);
       }
     };
 
-    checkAdminAccessAndFetchData();
-  }, [router]); // Add router to dependency array if using router.push
+    fetchData();
+  }, [router]);
 
   const handleExport = async () => {
     try {
       await observationService.exportCSV();
-      // The service already handles the download, so just a confirmation message
-      alert('✅ CSV export initiated. Check your downloads!');
-    } catch (error) {
-      console.error("❌ Failed to export CSV:", error);
-      alert('Failed to export CSV. Please try again.');
+      alert('CSV download started.');
+    } catch {
+      alert('CSV export failed.');
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this log?')) return;
-    try {
-      await observationService.deleteLog(id);
-      setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
-      alert('✅ Log deleted successfully!');
-    } catch (err) {
-      console.error("❌ Failed to delete log:", err);
-      alert('Failed to delete log.');
+  const handleAddOption = () => {
+    if (optionInput.trim() !== '') {
+      setOptions(prev => [...prev, optionInput.trim()]);
+      setOptionInput('');
     }
   };
 
-  const handleVerifyToggle = async (id, currentStatus) => {
-    try {
-      // observationService.updateLog now directly returns the updated species_log object
-      const updatedLog = await observationService.updateLog(id, { verified: !currentStatus });
+  const handleSubmitQuestion = async () => {
+    if (!questionText.trim()) {
+      alert("Please enter the question text.");
+      return;
+    }
 
-      if (updatedLog) {
-        setLogs(prevLogs =>
-          prevLogs.map(log => (log.id === id ? updatedLog : log))
-        );
-        alert('✅ Verification status updated!');
-      } else {
-        throw new Error("Invalid response for updateLog - updated log not found.");
-      }
+    try {
+      setQuestionSubmitting(true);
+      await questionService.addQuestion({
+        question_text: questionText.trim(),
+        is_required: isRequired,
+        options: options.length > 0 ? options : null,
+      });
+
+      alert("✅ Question added successfully!");
+      setQuestionText('');
+      setIsRequired(false);
+      setOptions([]);
     } catch (err) {
-      console.error("❌ Failed to update verification status:", err);
-      alert('Failed to update verification status.');
+      console.error("❌ Failed to add question:", err);
+      alert("Failed to add question. Please try again.");
+    } finally {
+      setQuestionSubmitting(false);
     }
   };
 
@@ -120,7 +116,7 @@ const Admin = () => {
       <Navbar />
 
       <div className="p-6 max-w-7xl mx-auto bg-green-50 min-h-screen">
-        <h2 className="text-3xl font-bold !text-black mb-6">Admin Dashboard</h2>
+        <h2 className="text-3xl font-bold text-green-900 mb-6">Admin Dashboard</h2>
 
         <button
           onClick={handleExport}
@@ -129,8 +125,63 @@ const Admin = () => {
           Export CSV
         </button>
 
+        <div className="bg-white p-6 mb-8 rounded-xl shadow border border-green-200">
+          <h3 className="text-xl font-semibold mb-4">Add New Question</h3>
+
+          <input
+            type="text"
+            placeholder="Question text"
+            value={questionText}
+            onChange={(e) => setQuestionText(e.target.value)}
+            className="w-full mb-3 p-2 border rounded-md"
+          />
+
+          <div className="flex items-center mb-3">
+            <input
+              type="checkbox"
+              checked={isRequired}
+              onChange={() => setIsRequired(!isRequired)}
+              className="mr-2"
+            />
+            <label className="text-sm">Required</label>
+          </div>
+
+          <div className="mb-3">
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                placeholder="Add option"
+                value={optionInput}
+                onChange={(e) => setOptionInput(e.target.value)}
+                className="flex-1 p-2 border rounded-md"
+              />
+              <button
+                onClick={handleAddOption}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md"
+              >
+                Add Option
+              </button>
+            </div>
+            {options.length > 0 && (
+              <ul className="list-disc list-inside text-sm text-gray-700">
+                {options.map((opt, idx) => (
+                  <li key={idx}>{opt}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <button
+            onClick={handleSubmitQuestion}
+            disabled={questionSubmitting}
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg"
+          >
+            {questionSubmitting ? 'Submitting...' : 'Submit Question'}
+          </button>
+        </div>
+
         {loading ? (
-          <p className="text-gray-700 text-lg">Loading data...</p>
+          <p className="text-gray-700 text-lg">Loading...</p>
         ) : error ? (
           <p className="text-red-600 text-lg">{error}</p>
         ) : logs.length > 0 ? (
@@ -140,45 +191,28 @@ const Admin = () => {
                 key={log.id}
                 className="bg-white p-5 rounded-xl shadow hover:shadow-lg border border-green-100 transition-shadow"
               >
-                <h3 className="text-xl font-bold !text-black mb-1">
+                <h3 className="text-xl font-bold text-green-800 mb-2">
                   {speciesMap[log.species_id] || 'Unknown Species'}
                 </h3>
-                <p className="text-sm text-gray-700"><strong>User:</strong> {usersMap[log.user_id] || 'Unknown User'}</p>
+                <p className="text-sm text-gray-700"><strong>User:</strong> {usersMap[log.user_id] || 'Unknown'}</p>
                 <p className="text-sm text-gray-700"><strong>Location:</strong> {log.location_name || 'N/A'}</p>
                 <p className="text-sm text-gray-700">
-                  <strong>Lat:</strong> {log.location_latitude !== null ? log.location_latitude : 'N/A'},
-                  <strong> Lng:</strong> {log.location_longitude !== null ? log.location_longitude : 'N/A'}
+                  <strong>Lat:</strong> {log.location_latitude ?? 'N/A'},
+                  <strong> Lng:</strong> {log.location_longitude ?? 'N/A'}
                 </p>
                 <p className="text-sm text-gray-700"><strong>Notes:</strong> {log.notes || 'N/A'}</p>
                 <p className="text-sm text-gray-700"><strong>Created At:</strong> {new Date(log.created_at).toLocaleString()}</p>
-                <p className="text-sm text-gray-700"><strong>Verified:</strong> {log.verified ? '✅ Yes' : '❌ No'}</p>
-
-                {log.answers && Array.isArray(log.answers) && log.answers.length > 0 && (
+                <p className="text-sm text-gray-700"><strong>Verified:</strong> {log.verified ? '✅' : '❌'}</p>
+                {Array.isArray(log.answers) && log.answers.length > 0 && (
                   <div className="mt-3 bg-green-100 p-3 rounded-md text-sm">
                     <h4 className="font-semibold mb-1 text-green-900">Answers:</h4>
-                    {log.answers.map(answer => (
-                      // Ensure answer.id is unique, otherwise use index only as last resort
-                      <p key={answer.id || `${log.id}-${answer.question_id}`}>
-                        <strong>{answer.question?.question_text || `Question ${answer.question_id}`}:</strong> {answer.answer_text}
+                    {log.answers.map(a => (
+                      <p key={a.id || `${log.id}-${a.question_id}`}>
+                        <strong>{a.question_text || `Q${a.question_id}`}:</strong> {a.answer_text}
                       </p>
                     ))}
                   </div>
                 )}
-
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={() => handleDelete(log.id)}
-                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-1 rounded-md"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => handleVerifyToggle(log.id, log.verified)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded-md"
-                  >
-                    {log.verified ? 'Unverify' : 'Verify'}
-                  </button>
-                </div>
               </div>
             ))}
           </div>

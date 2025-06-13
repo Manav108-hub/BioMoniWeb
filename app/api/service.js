@@ -77,6 +77,10 @@ export const questionService = {
     const response = await apiClient.get('/questions');
     return response.data.questions; // Returns the array of questions
   },
+  createQuestion: async (q) => {
+    const res = await apiClient.post('/questions', q);
+    return res.data.question;
+  },
 };
 
 // Observation services
