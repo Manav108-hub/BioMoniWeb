@@ -11,6 +11,7 @@ import Navbar from '../components/common/Navbar';
 
 const Dashboard = () => {
   const { user } = useAuth();
+
   const [speciesList, setSpeciesList] = useState([]);
   const [questionList, setQuestionList] = useState([]);
   const [speciesId, setSpeciesId] = useState('');
@@ -27,17 +28,29 @@ const Dashboard = () => {
   const [photo, setPhoto] = useState(null);
   const [isSubmittingSpecies, setIsSubmittingSpecies] = useState(false);
 
+  // NEW: species ID → image URL mapping from /species-logs
+  const [speciesImageMap, setSpeciesImageMap] = useState({});
+
   useEffect(() => {
     const loadOptions = async () => {
       const speciesData = await speciesService.getSpecies();
       const questionData = await questionService.getQuestions();
+      const logs = await observationService.getUserLogs();
+
+      // Create map of species_id => photo_path
+      const imageMap = {};
+      for (const log of logs) {
+        if (!imageMap[log.species_id] && log.photo_path) {
+          imageMap[log.species_id] = log.photo_path;
+        }
+      }
+
       setSpeciesList(speciesData);
       setQuestionList(questionData);
+      setSpeciesImageMap(imageMap);
     };
 
-    if (user) {
-      loadOptions();
-    }
+    if (user) loadOptions();
   }, [user]);
 
   const handleAnswerChange = (questionId, text) => {
@@ -103,7 +116,6 @@ const Dashboard = () => {
     <>
       <Navbar />
       <div className="p-6 max-w-4xl mx-auto bg-green-50 rounded-lg shadow-lg my-8 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
-
         <h2 className="text-3xl font-bold mb-6 !text-black">Add Observation</h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -119,6 +131,17 @@ const Dashboard = () => {
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+
+            {speciesId && speciesImageMap[speciesId] && (
+              <div className="mt-4">
+                <h4 className="text-sm font-medium !text-black mb-1">Species Image</h4>
+                <img
+                  src={speciesImageMap[speciesId]}
+                  alt="Species"
+                  className="w-40 h-auto rounded border"
+                />
+              </div>
+            )}
           </div>
 
           <div>

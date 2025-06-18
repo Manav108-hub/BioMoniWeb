@@ -116,7 +116,7 @@ const Admin = () => {
       <Navbar />
 
       <div className="p-6 max-w-7xl mx-auto bg-green-50 min-h-screen">
-        <h2 className="text-3xl font-bold text-green-900 mb-6">Admin Dashboard</h2>
+        <h2 className="text-3xl font-bold !text-black mb-6">Admin Dashboard</h2>
 
         <button
           onClick={handleExport}
@@ -126,7 +126,7 @@ const Admin = () => {
         </button>
 
         <div className="bg-white p-6 mb-8 rounded-xl shadow border border-green-200">
-          <h3 className="text-xl font-semibold mb-4">Add New Question</h3>
+          <h3 className="text-xl font-semibold mb-4 !text-black">Add New Question</h3>
 
           <input
             type="text"
@@ -191,7 +191,7 @@ const Admin = () => {
                 key={log.id}
                 className="bg-white p-5 rounded-xl shadow hover:shadow-lg border border-green-100 transition-shadow"
               >
-                <h3 className="text-xl font-bold text-green-800 mb-2">
+                <h3 className="text-xl font-bold !text-black mb-2">
                   {speciesMap[log.species_id] || 'Unknown Species'}
                 </h3>
                 <p className="text-sm text-gray-700"><strong>User:</strong> {usersMap[log.user_id] || 'Unknown'}</p>
