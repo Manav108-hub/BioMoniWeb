@@ -4,7 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import AnswerInput from '../components/forms/AnswerInput';
 import PhotoPicker from '../components/forms/PhotoPicker';
-import { speciesService, observationService, questionService } from '../api/service';
+import {
+  speciesService,
+  observationService,
+  questionService,
+  mapService
+} from '../api/service';
 import Input from '../components/common/Input';
 import Button from '../components/common/Button';
 import Navbar from '../components/common/Navbar';
@@ -27,21 +32,21 @@ const Dashboard = () => {
   const [answers, setAnswers] = useState({});
   const [photo, setPhoto] = useState(null);
   const [isSubmittingSpecies, setIsSubmittingSpecies] = useState(false);
-
-  // NEW: species ID → image URL mapping from /species-logs
   const [speciesImageMap, setSpeciesImageMap] = useState({});
 
   useEffect(() => {
     const loadOptions = async () => {
-      const speciesData = await speciesService.getSpecies();
-      const questionData = await questionService.getQuestions();
-      const logs = await observationService.getUserLogs();
+      const [speciesData, questionData, speciesImages] = await Promise.all([
+        speciesService.getSpecies(),
+        questionService.getQuestions(),
+        mapService.getSpeciesImages()  // 👈 NEW: Load public images
+      ]);
 
-      // Create map of species_id => photo_path
+      // Map species_id → image URL
       const imageMap = {};
-      for (const log of logs) {
-        if (!imageMap[log.species_id] && log.photo_path) {
-          imageMap[log.species_id] = log.photo_path;
+      for (const img of speciesImages) {
+        if (img.species_id && img.photo_path) {
+          imageMap[img.species_id] = img.photo_path;
         }
       }
 

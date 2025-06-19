@@ -156,3 +156,15 @@ export const userService = {
     return response.data.user; // Returns the updated user object
   },
 };
+
+// Public map services
+export const mapService = {
+  getSpeciesLocations: async () => {
+    const response = await axios.get(`${API_BASE_URL}/public/species-locations`);
+    return response.data;
+  },
+  getSpeciesImages: async () => {
+    const response = await axios.get(`${API_BASE_URL}/public/species-images`);
+    return response.data;
+  },
+};
