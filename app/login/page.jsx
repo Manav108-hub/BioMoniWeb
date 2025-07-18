@@ -36,7 +36,7 @@ const Login = () => {
         <div className="bg-white shadow-lg rounded-xl p-8 max-w-md w-full border border-green-100">
           <h2 className="text-3xl font-bold !text-black mb-6 text-center">Login</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Email" value={email} onChange={setEmail} />
+            <Input label="Username" value={email} onChange={setEmail} />
             <Input label="Password" type="password" value={password} onChange={setPassword} />
             <Button title="Login" />
           </form>
