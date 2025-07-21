@@ -71,8 +71,8 @@ const Dashboard = () => {
       await observationService.submitObservation({
         species_id: speciesId,
         location_name: locationName,
-        latitude,
-        longitude,
+        location_latitude: latitude ? parseFloat(latitude) : null,
+        location_longitude: longitude ? parseFloat(longitude) : null,
         answers: Object.entries(answers).map(([qId, ans]) => ({
           question_id: parseInt(qId),
           answer_text: ans
