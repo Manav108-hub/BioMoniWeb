@@ -172,10 +172,10 @@ const Dashboard = () => {
           </div>
 
           <div className="space-y-6">
-            {questionList.map(q => (
+            {questionList.map((q, index) => (
               <AnswerInput
                 key={q.id}
-                question={q}
+                question={{...q, questionNumber: index + 1}}
                 value={answers[q.id] || ''}
                 onChange={handleAnswerChange}
               />

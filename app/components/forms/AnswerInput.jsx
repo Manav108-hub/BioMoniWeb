@@ -8,12 +8,18 @@ const AnswerInput = ({ question, value, onChange }) => {
     onChange(question.id, text);
   };
 
+  // Create the question label with number
+  const getQuestionLabel = () => {
+    const questionNumber = question.questionNumber ? `${question.questionNumber}. ` : '';
+    return `${questionNumber}${question.question_text}`;
+  };
+
   // Render based on question type
   switch (question.question_type) {
     case 'multiple_choice':
       return (
         <div className="mb-4">
-          <label className="block mb-2">{question.question_text}</label>
+          <label className="block mb-2">{getQuestionLabel()}</label>
           <select 
             value={value}
             onChange={(e) => handleChange(e.target.value)}
@@ -33,7 +39,7 @@ const AnswerInput = ({ question, value, onChange }) => {
     case 'yes_no':
       return (
         <div className="mb-4">
-          <label className="block mb-2">{question.question_text}</label>
+          <label className="block mb-2">{getQuestionLabel()}</label>
           <div className="flex gap-4">
             <button 
               type="button"
@@ -56,7 +62,7 @@ const AnswerInput = ({ question, value, onChange }) => {
     case 'text':
       return (
         <Input 
-          label={question.question_text}
+          label={getQuestionLabel()}
           value={value}
           onChange={handleChange}
           required={question.is_required}
@@ -66,7 +72,7 @@ const AnswerInput = ({ question, value, onChange }) => {
     case 'number':
       return (
         <Input 
-          label={question.question_text}
+          label={getQuestionLabel()}
           value={value}
           onChange={handleChange}
           type="number"
@@ -77,7 +83,7 @@ const AnswerInput = ({ question, value, onChange }) => {
     case 'checkbox':
       return (
         <div className="mb-4">
-          <label className="block mb-2">{question.question_text}</label>
+          <label className="block mb-2">{getQuestionLabel()}</label>
           {question.options.map((option, idx) => (
             <div key={idx} className="flex items-center mb-2">
               <input
