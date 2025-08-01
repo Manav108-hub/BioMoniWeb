@@ -21,10 +21,10 @@ const Dashboard = () => {
   const [questionList, setQuestionList] = useState([]);
   const [speciesId, setSpeciesId] = useState('');
   const [newSpecies, setNewSpecies] = useState({
-    name: '',
+    local_name: '',
     scientific_name: '',
-    category: '',
-    description: ''
+    sighting_time: '', // Changed from 'category'
+    habitat_type: ''  // Changed from 'description'
   });
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -73,7 +73,7 @@ const Dashboard = () => {
     }
 
     // Find the parent question by question_text (since we don't have IDs in the data)
-    const parentQuestion = questionList.find(q => 
+    const parentQuestion = questionList.find(q =>
       q.question_text === question.depends_on
     );
 
@@ -103,7 +103,7 @@ const Dashboard = () => {
   const getQuestionsBySection = () => {
     const visibleQuestions = getVisibleQuestions();
     const sections = {};
-    
+
     visibleQuestions.forEach((question, index) => {
       const section = question.section || 'General';
       if (!sections[section]) {
@@ -114,7 +114,7 @@ const Dashboard = () => {
         questionNumber: index + 1
       });
     });
-    
+
     return sections;
   };
 
@@ -205,13 +205,37 @@ const Dashboard = () => {
           </div>
 
           <div>
-            <h3 className="text-xl font-semibold mb-4 !text-black">Or Add New Species</h3>
-            <div className="space-y-4">
-              <Input label="Name" value={newSpecies.name} onChange={(val) => setNewSpecies({ ...newSpecies, name: val })} />
-              <Input label="Scientific Name" value={newSpecies.scientific_name} onChange={(val) => setNewSpecies({ ...newSpecies, scientific_name: val })} />
-              <Input label="Category" value={newSpecies.category} onChange={(val) => setNewSpecies({ ...newSpecies, category: val })} />
-              <Input label="Description" value={newSpecies.description} onChange={(val) => setNewSpecies({ ...newSpecies, description: val })} />
-              <Button title={isSubmittingSpecies ? "Submitting..." : "Add Species"} onClick={handleNewSpeciesSubmit} disabled={isSubmittingSpecies} />
+            <div>
+              <h3 className="text-xl font-semibold mb-4 !text-black">Or Add New Species</h3>
+              <div className="space-y-4">
+                <Input
+                  label="Local Name"
+                  value={newSpecies.name}
+                  onChange={(val) => setNewSpecies({ ...newSpecies, name: val })}
+                />
+                <Input
+                  label="Scientific Name"
+                  value={newSpecies.scientific_name}
+                  onChange={(val) => setNewSpecies({ ...newSpecies, scientific_name: val })}
+                />
+                <Input
+                  label="When have you seen it? (date/month/year or how long ago)"
+                  placeholder="e.g., 15/06/2023 or 2 months ago"
+                  value={newSpecies.sighting_time}
+                  onChange={(val) => setNewSpecies({ ...newSpecies, sighting_time: val })}
+                />
+                <Input
+                  label="Habitat Type (if any)"
+                  placeholder="e.g., Forest, Wetland, Urban garden"
+                  value={newSpecies.habitat_type}
+                  onChange={(val) => setNewSpecies({ ...newSpecies, habitat_type: val })}
+                />
+                <Button
+                  title={isSubmittingSpecies ? "Submitting..." : "Add Species"}
+                  onClick={handleNewSpeciesSubmit}
+                  disabled={isSubmittingSpecies}
+                />
+              </div>
             </div>
           </div>
 
@@ -240,14 +264,14 @@ const Dashboard = () => {
                       value={answers[question.id] || ''}
                       onChange={handleAnswerChange}
                     />
-                    
+
                     {/* Show additional details or examples if available */}
                     {question.details?.examples && (
                       <p className="text-sm text-gray-600 mt-1">
                         Examples: {question.details.examples}
                       </p>
                     )}
-                    
+
                     {question.details?.note && (
                       <p className="text-sm text-blue-600 mt-1">
                         Note: {question.details.note}
