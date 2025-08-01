@@ -23,8 +23,8 @@ const Dashboard = () => {
   const [newSpecies, setNewSpecies] = useState({
     local_name: '',
     scientific_name: '',
-    sighting_time: '', // Changed from 'category'
-    habitat_type: ''  // Changed from 'description'
+    sighting_time: '',
+    habitat_type: ''
   });
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -65,38 +65,65 @@ const Dashboard = () => {
     }));
   };
 
-  // Function to check if a question should be displayed based on dependencies
+  const SPECIAL_NOT_EMPTY_TOKEN = '*';
+
+
+  // Fixed function to check if a question should be displayed based on dependencies
   const shouldShowQuestion = (question) => {
     // If no dependency, always show
     if (!question.depends_on || !question.depends_on_value) {
       return true;
     }
 
-    // Find the parent question by question_text (since we don't have IDs in the data)
-    const parentQuestion = questionList.find(q =>
-      q.question_text === question.depends_on
-    );
+    // Find the parent question by ID or question_text
+    let parentQuestion;
+
+    // Try to find by depends_on as ID first
+    if (typeof question.depends_on === 'number') {
+      parentQuestion = questionList.find(q => q.id === question.depends_on);
+    } else {
+      // Fallback: find by question_text (exact match)
+      parentQuestion = questionList.find(q =>
+        q.question_text.trim().toLowerCase() === question.depends_on.trim().toLowerCase()
+      );
+    }
 
     if (!parentQuestion) {
+      console.log(`Parent question not found for: ${question.question_text}`);
       return true; // Show if parent not found
     }
 
     // Get the answer for the parent question
     const parentAnswer = answers[parentQuestion.id];
 
+    // If no answer yet, don't show dependent question
+    if (!parentAnswer) {
+      return false;
+    }
+
     // Check if parent answer matches the required value
     if (Array.isArray(question.depends_on_value)) {
       return question.depends_on_value.includes(parentAnswer);
     }
 
-    return parentAnswer === question.depends_on_value;
+    // For string comparison, normalize both values
+    const normalizedParentAnswer = String(parentAnswer).trim().toLowerCase();
+    const normalizedRequiredValue = String(question.depends_on_value).trim().toLowerCase();
+
+    if (normalizedRequiredValue === SPECIAL_NOT_EMPTY_TOKEN) {
+      return normalizedParentAnswer !== '';
+    }
+    return normalizedParentAnswer === normalizedRequiredValue;
+
+
+
   };
 
   // Get filtered questions that should be displayed
   const getVisibleQuestions = () => {
     return questionList
       .filter(shouldShowQuestion)
-      .sort((a, b) => a.order_index - b.order_index);
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
   };
 
   // Group questions by section for better organization
@@ -133,7 +160,17 @@ const Dashboard = () => {
       }, photo);
 
       alert('Observation submitted!');
+
+      // Reset form after successful submission
+      setAnswers({});
+      setSpeciesId('');
+      setLocationName('');
+      setLatitude('');
+      setLongitude('');
+      setPhoto(null);
+
     } catch (error) {
+      console.error('Submission error:', error);
       alert('Submission failed');
     }
   };
@@ -146,7 +183,17 @@ const Dashboard = () => {
       setSpeciesList(prev => [...prev, species]);
       setSpeciesId(species.id);
       alert('Species added successfully!');
+
+      // Reset new species form
+      setNewSpecies({
+        local_name: '',
+        scientific_name: '',
+        sighting_time: '',
+        habitat_type: ''
+      });
+
     } catch (err) {
+      console.error('Species submission error:', err);
       alert('Failed to add species');
     } finally {
       setIsSubmittingSpecies(false);
@@ -171,6 +218,12 @@ const Dashboard = () => {
   };
 
   const questionsBySection = getQuestionsBySection();
+
+  // Debug: Log current answers and visible questions
+  useEffect(() => {
+    console.log('Current answers:', answers);
+    console.log('Visible questions:', getVisibleQuestions().map(q => q.question_text));
+  }, [answers, questionList]);
 
   return (
     <>
@@ -210,8 +263,8 @@ const Dashboard = () => {
               <div className="space-y-4">
                 <Input
                   label="Local Name"
-                  value={newSpecies.name}
-                  onChange={(val) => setNewSpecies({ ...newSpecies, name: val })}
+                  value={newSpecies.local_name}
+                  onChange={(val) => setNewSpecies({ ...newSpecies, local_name: val })}
                 />
                 <Input
                   label="Scientific Name"

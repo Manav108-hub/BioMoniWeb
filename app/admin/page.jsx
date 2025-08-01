@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// Constants
+// Question input types
 const QUESTION_TYPES = [
   { value: 'text', label: 'Text Input' },
   { value: 'number', label: 'Number Input' },
@@ -18,6 +18,7 @@ const QUESTION_TYPES = [
   { value: 'textarea', label: 'Long Text' }
 ];
 
+// Initial form state for new/edit question
 const INITIAL_QUESTION_STATE = {
   id: null,
   questionText: '',
@@ -33,6 +34,7 @@ const INITIAL_QUESTION_STATE = {
 
 const Admin = () => {
   const router = useRouter();
+
   const [state, setState] = useState({
     logs: [],
     speciesMap: {},
@@ -45,7 +47,7 @@ const Admin = () => {
   const [questionForm, setQuestionForm] = useState(INITIAL_QUESTION_STATE);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Check authentication helper
+  // Check if user is authenticated, else redirect to login
   const checkAuth = useCallback(() => {
     if (typeof window === 'undefined') return false;
     const token = localStorage.getItem('token');
@@ -56,81 +58,74 @@ const Admin = () => {
     return true;
   }, [router]);
 
-  // Fetch all data
+  // Fetch all required data: logs, species, users, questions
   const fetchData = useCallback(async (signal) => {
-  if (!checkAuth()) return;
+    if (!checkAuth()) return;
 
-  try {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
 
-    const [logs, species, users, questions] = await Promise.all([
-      observationService.getAllLogs({ signal }),
-      speciesService.getSpecies({ signal }),
-      userService.getAllUsers({ signal }),
-      questionService.getQuestions({ signal })
-    ]);
+      const [logs, species, users, questions] = await Promise.all([
+        observationService.getAllLogs({ signal }),
+        speciesService.getSpecies({ signal }),
+        userService.getAllUsers({ signal }),
+        questionService.getQuestions({ signal })
+      ]);
 
-    if (signal.aborted) return;
+      if (signal.aborted) return;
 
-    const speciesMap = (species || []).reduce((acc, s) => ({
-      ...acc,
-      [s.id]: s.name
-    }), {});
+      const speciesMap = (species || []).reduce((acc, s) => ({ ...acc, [s.id]: s.name }), {});
+      const usersMap = (users || []).reduce((acc, u) => ({ ...acc, [u.id]: u.username }), {});
 
-    const usersMap = (users || []).reduce((acc, u) => ({
-      ...acc,
-      [u.id]: u.username
-    }), {});
+      setState({
+        logs: logs || [],
+        speciesMap,
+        usersMap,
+        questions: questions || [],
+        loading: false,
+        error: null
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
 
-    setState({
-      logs: logs || [],
-      speciesMap,
-      usersMap,
-      questions: questions || [],
-      loading: false,
-      error: null
-    });
+      console.error("Fetch failed", err);
+      const errorMessage = (err.response?.status === 401 || err.response?.status === 403)
+        ? 'Access denied. Redirecting to login...'
+        : 'Failed to load admin data.';
 
-  } catch (err) {
-    if (err.name === 'AbortError') return; // Prevent setting state if aborted
+      setState(prev => ({ ...prev, loading: false, error: errorMessage }));
+      toast.error(errorMessage);
 
-    console.error("Fetch failed", err);
-    const errorMessage = err.response?.status === 401 || err.response?.status === 403
-      ? 'Access denied. Redirecting to login...'
-      : 'Failed to load admin data.';
-
-    setState(prev => ({ ...prev, loading: false, error: errorMessage }));
-    toast.error(errorMessage);
-
-    if (err.response?.status === 401 || err.response?.status === 403) {
-      setTimeout(() => router.push('/login'), 2000);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setTimeout(() => router.push('/login'), 2000);
+      }
     }
-  }
-}, [router, checkAuth]);
-
+  }, [router, checkAuth]);
 
   useEffect(() => {
-  const abortController = new AbortController();
-  fetchData(abortController.signal);
-  return () => abortController.abort();
-}, [fetchData]);
+    const abortController = new AbortController();
+    fetchData(abortController.signal);
+    return () => abortController.abort();
+  }, [fetchData]);
 
-
-  // Question form handlers
+  // Handle changes in question form inputs
   const handleFormChange = (field, value) => {
     setQuestionForm(prev => ({ ...prev, [field]: value }));
   };
 
+  // Add new option for choice questions
   const handleAddOption = () => {
-    if (questionForm.optionInput.trim()) {
+    const val = questionForm.optionInput.trim();
+    if (val && !questionForm.options.includes(val)) {
       setQuestionForm(prev => ({
         ...prev,
-        options: [...prev.options, prev.optionInput.trim()],
+        options: [...prev.options, val],
         optionInput: ''
       }));
     }
   };
 
+  // Remove an option by index
   const handleRemoveOption = (index) => {
     setQuestionForm(prev => ({
       ...prev,
@@ -138,29 +133,30 @@ const Admin = () => {
     }));
   };
 
+  // Reset form to initial state
   const resetForm = () => {
     setQuestionForm(INITIAL_QUESTION_STATE);
   };
 
-  // Question CRUD operations
+  // Handle Add or Update question submit
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
-    
+
     if (!questionForm.questionText.trim()) {
       toast.error('Please enter the question text');
       return;
     }
 
-    // Validate choice questions have options
-    if ((questionForm.questionType === 'single_choice' || questionForm.questionType === 'multiple_choice') 
-        && questionForm.options.length === 0) {
+    if ((questionForm.questionType === 'single_choice' || questionForm.questionType === 'multiple_choice')
+      && questionForm.options.length === 0) {
       toast.error('Please add at least one option for choice questions');
       return;
     }
 
     try {
       setIsSubmitting(true);
-      
+
+      // Backend expects snake_case keys, so prepare accordingly
       const questionData = {
         question_text: questionForm.questionText.trim(),
         question_type: questionForm.questionType,
@@ -169,22 +165,17 @@ const Admin = () => {
         order_index: questionForm.orderIndex,
         depends_on: questionForm.dependsOn.trim() || null,
         depends_on_value: questionForm.dependsOnValue.trim() || null,
-        options: (questionForm.questionType === 'multiple_choice' || 
-                 questionForm.questionType === 'single_choice') && 
-                 questionForm.options.length > 0 ? questionForm.options : null,
+        options: ((questionForm.questionType === 'multiple_choice' || questionForm.questionType === 'single_choice')
+          && questionForm.options.length > 0) ? questionForm.options : null,
         details: null
       };
 
       let updatedQuestions;
       if (questionForm.id) {
-        // Update existing question
         const updatedQuestion = await questionService.updateQuestion(questionForm.id, questionData);
-        updatedQuestions = state.questions.map(q => 
-          q.id === questionForm.id ? updatedQuestion : q
-        );
+        updatedQuestions = state.questions.map(q => q.id === questionForm.id ? updatedQuestion : q);
         toast.success('Question updated successfully');
       } else {
-        // Create new question
         const newQuestion = await questionService.createQuestion(questionData);
         updatedQuestions = [...state.questions, newQuestion];
         toast.success('Question added successfully');
@@ -202,6 +193,7 @@ const Admin = () => {
     }
   };
 
+  // Edit question: load question data into form
   const handleEditQuestion = (question) => {
     setQuestionForm({
       id: question.id,
@@ -209,27 +201,21 @@ const Admin = () => {
       questionType: question.question_type,
       isRequired: question.is_required,
       section: question.section || '',
-      orderIndex: question.order_index,
+      orderIndex: question.order_index || 0,
       dependsOn: question.depends_on || '',
       dependsOnValue: question.depends_on_value || '',
       optionInput: '',
-      options: question.options ? (
-        typeof question.options === 'string' 
-          ? JSON.parse(question.options) 
-          : question.options
-      ) : []
+      options: question.options ? (typeof question.options === 'string' ? JSON.parse(question.options) : question.options) : []
     });
   };
 
+  // Delete a question after confirmation
   const handleDeleteQuestion = async (questionId) => {
     if (!window.confirm("Are you sure you want to delete this question?")) return;
 
     try {
       await questionService.deleteQuestion(questionId);
-      setState(prev => ({
-        ...prev,
-        questions: prev.questions.filter(q => q.id !== questionId)
-      }));
+      setState(prev => ({ ...prev, questions: prev.questions.filter(q => q.id !== questionId) }));
       toast.success('Question deleted successfully');
     } catch (err) {
       console.error("Delete failed", err);
@@ -238,7 +224,7 @@ const Admin = () => {
     }
   };
 
-  // Export handler
+  // Export CSV
   const handleExport = async () => {
     try {
       await observationService.exportCSV();
@@ -250,18 +236,17 @@ const Admin = () => {
     }
   };
 
-  // Safe options parsing helper
+  // Format options array into comma-separated string
   const parseOptions = (options) => {
     if (!options) return '';
     try {
-      const parsedOptions = typeof options === 'string' ? JSON.parse(options) : options;
-      return Array.isArray(parsedOptions) ? parsedOptions.join(', ') : 'Invalid format';
+      const parsed = typeof options === 'string' ? JSON.parse(options) : options;
+      return Array.isArray(parsed) ? parsed.join(', ') : 'Invalid format';
     } catch {
       return 'Invalid options';
     }
   };
 
-  // Loading and error states
   if (state.loading) {
     return (
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
@@ -278,8 +263,8 @@ const Admin = () => {
       <div className="min-h-screen bg-green-50 flex items-center justify-center">
         <div className="text-center text-red-600">
           <p className="text-xl">{state.error}</p>
-          <button 
-            onClick={fetchData}
+          <button
+            onClick={() => fetchData(new AbortController().signal)}
             className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
             Retry
@@ -303,7 +288,7 @@ const Admin = () => {
               <h3 className="text-xl font-semibold mb-4 !text-gray-800">
                 {questionForm.id ? 'Edit Question' : 'Add New Question'}
               </h3>
-              
+
               <form onSubmit={handleSubmitQuestion}>
                 {/* Question Text */}
                 <div className="mb-4">
@@ -337,7 +322,7 @@ const Admin = () => {
                   <label className="block text-sm font-medium mb-2">Section (Optional)</label>
                   <input
                     type="text"
-                    placeholder="e.g., 'Basic Info', 'Location Details'"
+                    placeholder="e.g., Basic Info, Location Details"
                     value={questionForm.section}
                     onChange={(e) => handleFormChange('section', e.target.value)}
                     className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -378,6 +363,9 @@ const Admin = () => {
                       className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       disabled={!questionForm.dependsOn.trim()}
                     />
+                    <small className="text-gray-500 pt-1 block">
+                      Use <code>*notempty</code> to show when the parent answer is filled.
+                    </small>
                   </div>
                 </div>
 
@@ -393,7 +381,7 @@ const Admin = () => {
                   <label htmlFor="required-checkbox" className="text-sm">Required Question</label>
                 </div>
 
-                {/* Options (for choice questions) */}
+                {/* Options for choice questions */}
                 {(questionForm.questionType === 'single_choice' || questionForm.questionType === 'multiple_choice') && (
                   <div className="mb-4">
                     <label className="block text-sm font-medium mb-2">Options *</label>
@@ -420,9 +408,9 @@ const Admin = () => {
                       </button>
                     </div>
                     {questionForm.options.length > 0 && (
-                      <div className="space-y-1">
+                      <div className="space-y-1 max-h-40 overflow-auto rounded border bg-gray-50 p-2">
                         {questionForm.options.map((opt, idx) => (
-                          <div key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                          <div key={idx} className="flex items-center justify-between bg-white rounded p-1 shadow-sm">
                             <span className="text-sm">{opt}</span>
                             <button
                               type="button"
@@ -438,19 +426,20 @@ const Admin = () => {
                   </div>
                 )}
 
+                {/* Submit/Cancel Buttons */}
                 <div className="flex space-x-2">
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg disabled:opacity-50 transition-colors"
                   >
-                    {isSubmitting ? 'Processing...' : questionForm.id ? 'Update Question' : 'Add Question'}
+                    {isSubmitting ? 'Processing...' : (questionForm.id ? 'Update Question' : 'Add Question')}
                   </button>
                   {questionForm.id && (
                     <button
                       type="button"
                       onClick={resetForm}
-                      className="bg-gray-300 hover:bg-gray-400 !text-gray-800 px-6 py-2 rounded-lg transition-colors"
+                      className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded-lg transition-colors"
                     >
                       Cancel
                     </button>
@@ -470,7 +459,7 @@ const Admin = () => {
                   Export CSV
                 </button>
               </div>
-              
+
               {state.questions.length === 0 ? (
                 <p className="text-gray-600">No questions found.</p>
               ) : (
@@ -478,46 +467,46 @@ const Admin = () => {
                   {state.questions
                     .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
                     .map(q => (
-                    <div key={q.id} className="border-l-4 border-green-500 pl-4 py-2 bg-white rounded shadow-sm">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className="font-medium !text-gray-800">{q.question_text}</p>
-                          <div className="text-sm text-gray-600 space-x-4 mt-1">
-                            <span>Type: {q.question_type}</span>
-                            <span>Order: {q.order_index || 0}</span>
-                            {q.section && <span>Section: {q.section}</span>}
-                            <span>{q.is_required ? 'Required' : 'Optional'}</span>
+                      <div key={q.id} className="border-l-4 border-green-500 pl-4 py-2 bg-white rounded shadow-sm">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium !text-gray-800">{q.question_text}</p>
+                            <div className="text-sm text-gray-600 space-x-4 mt-1">
+                              <span>Type: {q.question_type}</span>
+                              <span>Order: {q.order_index || 0}</span>
+                              {q.section && <span>Section: {q.section}</span>}
+                              <span>{q.is_required ? 'Required' : 'Optional'}</span>
+                            </div>
+                            {q.depends_on && (
+                              <p className="text-xs text-blue-600 mt-1">
+                                Depends on: "{q.depends_on}" = "{q.depends_on_value}"
+                              </p>
+                            )}
+                            {q.options && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                Options: {parseOptions(q.options)}
+                              </p>
+                            )}
                           </div>
-                          {q.depends_on && (
-                            <p className="text-xs text-blue-600 mt-1">
-                              Depends on: "{q.depends_on}" = "{q.depends_on_value}"
-                            </p>
-                          )}
-                          {q.options && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Options: {parseOptions(q.options)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex space-x-2 ml-2">
-                          <button 
-                            onClick={() => handleEditQuestion(q)}
-                            className="text-blue-600 hover:text-blue-800 text-sm transition-colors"
-                            aria-label={`Edit question: ${q.question_text}`}
-                          >
-                            Edit
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteQuestion(q.id)}
-                            className="text-red-600 hover:text-red-800 text-sm transition-colors"
-                            aria-label={`Delete question: ${q.question_text}`}
-                          >
-                            Delete
-                          </button>
+                          <div className="flex space-x-2 ml-2">
+                            <button
+                              onClick={() => handleEditQuestion(q)}
+                              className="text-blue-600 hover:text-blue-800 text-sm transition-colors"
+                              aria-label={`Edit question: ${q.question_text}`}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(q.id)}
+                              className="text-red-600 hover:text-red-800 text-sm transition-colors"
+                              aria-label={`Delete question: ${q.question_text}`}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
@@ -527,7 +516,7 @@ const Admin = () => {
           <div className="lg:col-span-1">
             <div className="bg-white p-6 rounded-xl shadow border border-green-200 sticky top-6">
               <h3 className="text-xl font-semibold mb-4 !text-gray-800">Recent Observations ({state.logs.length})</h3>
-              
+
               {state.logs.length === 0 ? (
                 <p className="text-gray-600">No observations found.</p>
               ) : (
@@ -537,18 +526,10 @@ const Admin = () => {
                       <h4 className="font-bold !text-gray-800">
                         {state.speciesMap[log.species_id] || 'Unknown Species'}
                       </h4>
-                      <p className="text-sm text-gray-600 mt-1">
-                        <strong>User:</strong> {state.usersMap[log.user_id] || 'Unknown'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <strong>Location:</strong> {log.location_name || 'N/A'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <strong>Coordinates:</strong> {log.location_latitude ?? 'N/A'}, {log.location_longitude ?? 'N/A'}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <strong>Date:</strong> {new Date(log.created_at).toLocaleString()}
-                      </p>
+                      <p className="text-sm text-gray-600 mt-1"><strong>User:</strong> {state.usersMap[log.user_id] || 'Unknown'}</p>
+                      <p className="text-sm text-gray-600"><strong>Location:</strong> {log.location_name || 'N/A'}</p>
+                      <p className="text-sm text-gray-600"><strong>Coordinates:</strong> {log.location_latitude ?? 'N/A'}, {log.location_longitude ?? 'N/A'}</p>
+                      <p className="text-sm text-gray-600"><strong>Date:</strong> {new Date(log.created_at).toLocaleString()}</p>
                       {log.answers && log.answers.length > 0 && (
                         <div className="mt-2 bg-green-50 p-2 rounded text-sm">
                           <h5 className="font-semibold text-green-800">Answers:</h5>
