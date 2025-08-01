@@ -39,7 +39,7 @@ const Dashboard = () => {
       const [speciesData, questionData, speciesImages] = await Promise.all([
         speciesService.getSpecies(),
         questionService.getQuestions(),
-        mapService.getSpeciesImages()  // 👈 NEW: Load public images
+        mapService.getSpeciesImages()
       ]);
 
       // Map species_id → image URL
@@ -63,6 +63,59 @@ const Dashboard = () => {
       ...prev,
       [questionId]: text
     }));
+  };
+
+  // Function to check if a question should be displayed based on dependencies
+  const shouldShowQuestion = (question) => {
+    // If no dependency, always show
+    if (!question.depends_on || !question.depends_on_value) {
+      return true;
+    }
+
+    // Find the parent question by question_text (since we don't have IDs in the data)
+    const parentQuestion = questionList.find(q => 
+      q.question_text === question.depends_on
+    );
+
+    if (!parentQuestion) {
+      return true; // Show if parent not found
+    }
+
+    // Get the answer for the parent question
+    const parentAnswer = answers[parentQuestion.id];
+
+    // Check if parent answer matches the required value
+    if (Array.isArray(question.depends_on_value)) {
+      return question.depends_on_value.includes(parentAnswer);
+    }
+
+    return parentAnswer === question.depends_on_value;
+  };
+
+  // Get filtered questions that should be displayed
+  const getVisibleQuestions = () => {
+    return questionList
+      .filter(shouldShowQuestion)
+      .sort((a, b) => a.order_index - b.order_index);
+  };
+
+  // Group questions by section for better organization
+  const getQuestionsBySection = () => {
+    const visibleQuestions = getVisibleQuestions();
+    const sections = {};
+    
+    visibleQuestions.forEach((question, index) => {
+      const section = question.section || 'General';
+      if (!sections[section]) {
+        sections[section] = [];
+      }
+      sections[section].push({
+        ...question,
+        questionNumber: index + 1
+      });
+    });
+    
+    return sections;
   };
 
   const handleSubmit = async (e) => {
@@ -116,6 +169,8 @@ const Dashboard = () => {
       }
     );
   };
+
+  const questionsBySection = getQuestionsBySection();
 
   return (
     <>
@@ -171,16 +226,38 @@ const Dashboard = () => {
             <Button title="Get Current Location" onClick={handleGetLocation} />
           </div>
 
-          <div className="space-y-6">
-            {questionList.map((q, index) => (
-              <AnswerInput
-                key={q.id}
-                question={{...q, questionNumber: index + 1}}
-                value={answers[q.id] || ''}
-                onChange={handleAnswerChange}
-              />
-            ))}
-          </div>
+          {/* Render questions by section with conditional logic */}
+          {Object.entries(questionsBySection).map(([sectionName, questions]) => (
+            <div key={sectionName} className="space-y-6">
+              <h3 className="text-xl font-semibold !text-black border-b pb-2">
+                {sectionName}
+              </h3>
+              <div className="space-y-4">
+                {questions.map((question) => (
+                  <div key={question.id || question.order_index}>
+                    <AnswerInput
+                      question={question}
+                      value={answers[question.id] || ''}
+                      onChange={handleAnswerChange}
+                    />
+                    
+                    {/* Show additional details or examples if available */}
+                    {question.details?.examples && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Examples: {question.details.examples}
+                      </p>
+                    )}
+                    
+                    {question.details?.note && (
+                      <p className="text-sm text-blue-600 mt-1">
+                        Note: {question.details.note}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
 
           <div className="mt-6">
             <PhotoPicker onPhotoSelect={setPhoto} />
