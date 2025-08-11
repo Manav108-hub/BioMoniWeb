@@ -15,7 +15,7 @@ const Navbar = () => {
           {/* Logo */}
           <div className="flex-shrink-0 flex items-center">
             <Link href="/" className="flex items-center">
-              <img src="/favicon.ico" alt="Logo" className="h-8 w-8 mr-2" />
+              {/* <img src="/favicon.ico" alt="Logo" className="h-8 w-8 mr-2" /> */}
               <span className="font-bold text-xl">Biodiversity App</span>
             </Link>
           </div>
